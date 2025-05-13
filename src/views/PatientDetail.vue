@@ -1,5 +1,5 @@
 <template>
-  <div class="patient-detail" v-loading="loading">
+  <div class="patient-detail" v-loading="loadingPatient">
     <div class="page-header">
       <h2>Карточка пациента</h2>
       <el-button @click="goBack">
@@ -13,7 +13,7 @@
         <el-descriptions title="Информация о пациенте" :column="3" border>
           <el-descriptions-item label="Фамилия">{{ patient.lastName }}</el-descriptions-item>
           <el-descriptions-item label="Имя">{{ patient.firstName }}</el-descriptions-item>
-          <el-descriptions-item label="Отчество">{{ patient.middleName }}</el-descriptions-item>
+          <el-descriptions-item label="Отчество">{{ patient.middleName || '-' }}</el-descriptions-item>
           <el-descriptions-item label="Дата рождения">{{ formatDate(patient.birthDate) }}</el-descriptions-item>
           <el-descriptions-item label="Пол">{{ patient.gender === 'male' ? 'Мужской' : 'Женский' }}</el-descriptions-item>
           <el-descriptions-item label="Номер полиса">{{ patient.policyNumber }}</el-descriptions-item>
@@ -22,25 +22,25 @@
 
       <div class="analyses-header">
         <h3>Архив анализов костного возраста</h3>
-        <el-button type="primary" @click="showAddAnalysisDialog">
+        <el-button type="primary" @click="showAddAnalysisDialog" :disabled="!patient">
           <el-icon><Plus /></el-icon>
           Добавить рентген
         </el-button>
       </div>
 
-      <el-card v-if="patient.analyses.length > 0" class="analyses-list">
+      <el-card v-if="sortedAnalyses.length > 0" class="analyses-list">
         <el-table :data="sortedAnalyses" style="width: 100%">
-          <el-table-column prop="date" label="Дата рентгена">
+          <el-table-column prop="date" label="Дата рентгена" min-width="120">
             <template #default="{ row }">
               {{ formatDate(row.date) }}
             </template>
           </el-table-column>
-          <el-table-column prop="predictedAge" label="Предсказанный возраст">
+          <el-table-column prop="predictedAge" label="Предсказанный возраст" min-width="150">
             <template #default="{ row }">
-              {{ row.predictedAge.toFixed(1) }} лет
+              {{ row.predictedAge !== null && row.predictedAge !== undefined ? row.predictedAge.toFixed(1) + ' лет' : 'Обработка...' }}
             </template>
           </el-table-column>
-          <el-table-column label="Действия" width="150">
+          <el-table-column label="Действия" width="150" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" size="small" @click="showAnalysisDetail(row)">
                 Подробнее
@@ -51,14 +51,14 @@
       </el-card>
 
       <el-empty
-          v-else
-          description="Нет данных об анализах"
+          v-else-if="!loadingPatient && patient"
+          description="У этого пациента еще нет анализов. Добавьте первый."
       />
     </template>
 
     <el-empty
-        v-else-if="!loading"
-        description="Пациент не найден"
+        v-else-if="!loadingPatient && !patient"
+        description="Пациент не найден. Возможно, он был удален или ссылка неверна."
     />
 
     <!-- Модалка для добавления нового анализа -->
@@ -66,12 +66,15 @@
         v-model="addAnalysisDialogVisible"
         title="Добавление рентгена"
         width="500px"
+        :close-on-click-modal="false"
+        @closed="resetAnalysisFormDialog"
     >
       <el-form
           ref="analysisFormRef"
           :model="analysisForm"
           :rules="analysisRules"
           label-position="top"
+          @submit.prevent="submitAnalysisForm(analysisFormRef)"
       >
         <el-form-item label="Дата рентгена" prop="date">
           <el-date-picker
@@ -81,26 +84,30 @@
               style="width: 100%"
               format="DD.MM.YYYY"
               value-format="YYYY-MM-DD"
+              :disabled-date="disabledFutureDates"
           />
         </el-form-item>
 
-        <el-form-item label="Загрузите изображение рентгена" prop="xrayImage">
+        <el-form-item label="Загрузите изображение рентгена" prop="xrayImageFile">
           <el-upload
+              ref="uploadRef"
               class="upload-demo"
               drag
               action="#"
               :auto-upload="false"
               :on-change="handleFileChange"
+              :on-remove="handleFileRemove"
               :limit="1"
               accept=".jpg,.jpeg,.png"
+              list-type="picture"
           >
-            <el-icon><UploadFilled /></el-icon>
+            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
             <div class="el-upload__text">
               Перетащите файл сюда или <em>нажмите для выбора</em>
             </div>
             <template #tip>
               <div class="el-upload__tip">
-                Только файлы JPG/PNG, не более 10MB
+                Файлы JPG/PNG, не более 10MB (проверка на клиенте)
               </div>
             </template>
           </el-upload>
@@ -108,103 +115,187 @@
       </el-form>
       <template #footer>
         <span class="dialog-footer">
-          <el-button @click="addAnalysisDialogVisible = false">Отмена</el-button>
-          <el-button type="primary" @click="submitAnalysisForm(analysisFormRef)">
+          <el-button @click="addAnalysisDialogVisible = false" :disabled="isSubmittingAnalysis">Отмена</el-button>
+          <el-button type="primary" @click="submitAnalysisForm(analysisFormRef)" :loading="isSubmittingAnalysis">
             Отправить
           </el-button>
         </span>
       </template>
     </el-dialog>
 
-    <!-- Модалка для просмотра информации -->
+    <!-- Модалка для просмотра информации об анализе -->
     <el-dialog
         v-model="analysisDetailDialogVisible"
         title="Детали анализа"
         width="700px"
+        @closed="selectedAnalysis = null"
     >
-      <div v-if="selectedAnalysis" class="analysis-detail">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <div class="analysis-info">
-              <p><strong>Дата рентгена:</strong> {{ formatDate(selectedAnalysis.date) }}</p>
-              <p><strong>Предсказанный возраст:</strong> {{ selectedAnalysis.predictedAge.toFixed(1) }} лет</p>
+      <div v-if="selectedAnalysis" class="analysis-detail-content">
+        <el-descriptions :column="1" border>
+            <el-descriptions-item label="Дата рентгена">{{ formatDate(selectedAnalysis.date) }}</el-descriptions-item>
+            <el-descriptions-item label="Предсказанный возраст">
+                {{ selectedAnalysis.predictedAge !== null && selectedAnalysis.predictedAge !== undefined ? selectedAnalysis.predictedAge.toFixed(1) + ' лет' : 'Обработка...' }}
+            </el-descriptions-item>
+        </el-descriptions>
 
-              <el-form :model="notesForm">
-                <el-form-item label="Примечания доктора">
-                  <el-input
-                      v-model="notesForm.doctorNotes"
-                      type="textarea"
-                      rows="4"
-                      placeholder="Введите примечания"
-                  />
-                </el-form-item>
-                <el-form-item>
-                  <el-button type="primary" @click="saveNotes">Сохранить примечания</el-button>
-                </el-form-item>
-              </el-form>
-            </div>
+        <el-row :gutter="20" style="margin-top: 20px;">
+          <el-col :xs="24" :md="12" class="xray-image-container">
+            <p><strong>Рентгеновский снимок:</strong></p>
+            <img
+                :src="getFullImageUrl(selectedAnalysis.xrayImageURL)"
+                alt="Рентген"
+                class="xray-image-preview"
+                v-if="selectedAnalysis.xrayImageURL"
+                @error="onImageError"
+            />
+            <el-empty description="Изображение отсутствует или не загрузилось" v-else />
           </el-col>
-          <el-col :span="12">
-            <div class="xray-image">
-              <img :src="selectedAnalysis.xrayImage" alt="Рентген" style="max-width: 100%;" />
-            </div>
+          <el-col :xs="24" :md="12">
+            <p><strong>Примечания доктора:</strong></p>
+            <el-form :model="notesForm" @submit.prevent="saveNotes">
+              <el-form-item>
+                <el-input
+                    v-model="notesForm.doctorNotes"
+                    type="textarea"
+                    rows="6"
+                    placeholder="Введите примечания..."
+                />
+              </el-form-item>
+              <el-form-item>
+                <el-button type="primary" @click="saveNotes" :loading="isSavingNotes">Сохранить примечания</el-button>
+              </el-form-item>
+            </el-form>
           </el-col>
         </el-row>
       </div>
+       <el-empty v-else description="Данные анализа не загружены."/>
     </el-dialog>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import type { FormInstance, FormRules, UploadFile } from 'element-plus';
+import type { FormInstance, FormRules, UploadFile, UploadInstance, UploadRawFile } from 'element-plus';
 import { ElMessage } from 'element-plus';
 import { Back, Plus, UploadFilled } from '@element-plus/icons-vue';
-import { usePatientsStore } from '@/stores/patients';
-import { type Analysis } from '@/types';
+import apiClient, { getFullImageUrl } from '@/services/api'; // Убедитесь, что путь правильный
+
+// Типы, которые приходят с бэкенда
+interface AnalysisBackend {
+  id: number;
+  date: string;
+  predictedAge: number | null; // Может быть null, пока обрабатывается
+  xrayImageURL: string;
+  doctorNotes?: string;
+}
+
+interface PatientBackend {
+  id: number;
+  lastName: string;
+  firstName: string;
+  middleName?: string;
+  birthDate: string;
+  gender: 'male' | 'female';
+  policyNumber: string;
+  analyses: AnalysisBackend[];
+}
 
 const route = useRoute();
 const router = useRouter();
-const patientsStore = usePatientsStore();
-const loading = ref(true);
 
-const patientId = computed(() => Number(route.params.id));
-const patient = computed(() => patientsStore.getPatientById(patientId.value));
+const loadingPatient = ref(true);
+const patient = ref<PatientBackend | null>(null);
+const patientId = computed(() => {
+    const idParam = route.params.id;
+    return Array.isArray(idParam) ? Number(idParam[0]) : Number(idParam);
+});
+
+
+const fetchPatientDetails = async () => {
+  if (isNaN(patientId.value)) {
+      ElMessage.error('Некорректный ID пациента.');
+      loadingPatient.value = false;
+      router.push({ name: 'home' });
+      return;
+  }
+  loadingPatient.value = true;
+  try {
+    const response = await apiClient.get<PatientBackend>(`/patients/${patientId.value}`);
+    patient.value = response.data;
+  } catch (error: any) {
+    ElMessage.error(`Не удалось загрузить данные пациента: ${error.message || 'Ошибка сервера'}`);
+    patient.value = null; // Если ошибка, сбрасываем пациента
+    router.push({ name: 'home' }); // Можно перенаправить на список
+  } finally {
+    loadingPatient.value = false;
+  }
+};
 
 const sortedAnalyses = computed(() => {
-  if (!patient.value) return [];
+  if (!patient.value || !patient.value.analyses) return [];
   return [...patient.value.analyses].sort((a, b) =>
       new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 });
 
+// Для модалки добавления анализа
 const analysisFormRef = ref<FormInstance>();
+const uploadRef = ref<UploadInstance>();
 const addAnalysisDialogVisible = ref(false);
-const analysisForm = ref({
+const isSubmittingAnalysis = ref(false);
+
+const analysisForm = ref<{
+  date: string;
+  xrayImageFile: UploadRawFile | null;
+}>({
   date: '',
-  xrayImage: '',
-  file: null as File | null
+  xrayImageFile: null
 });
 
 const analysisRules: FormRules = {
-  date: [
-    { required: true, message: 'Пожалуйста, выберите дату', trigger: 'change' }
-  ],
-  xrayImage: [
-    { required: true, message: 'Пожалуйста, загрузите изображение', trigger: 'change' }
-  ]
+  date: [{ required: true, message: 'Пожалуйста, выберите дату', trigger: 'change' }],
+  xrayImageFile: [{
+    required: true,
+    message: 'Пожалуйста, загрузите изображение рентгена',
+    // Валидатор сработает при изменении xrayImageFile
+    validator: (rule, value, callback) => {
+        if (!analysisForm.value.xrayImageFile) {
+            callback(new Error('Пожалуйста, загрузите изображение рентгена'));
+        } else {
+            callback();
+        }
+    },
+    trigger: 'change'
+  }]
 };
 
+// Для модалки деталей анализа
 const analysisDetailDialogVisible = ref(false);
-const selectedAnalysis = ref<Analysis | null>(null);
-const notesForm = ref({
-  doctorNotes: ''
-});
+const selectedAnalysis = ref<AnalysisBackend | null>(null);
+const notesForm = ref({ doctorNotes: '' });
+const isSavingNotes = ref(false);
 
 const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('ru-RU');
+  if (!dateString) return '-';
+   try {
+    const [year, month, day] = dateString.split('-');
+    if (year && month && day) {
+        return `${day}.${month}.${year}`;
+    }
+    const date = new Date(dateString);
+    if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('ru-RU');
+    }
+    return dateString;
+  } catch (e) {
+      return dateString;
+  }
+};
+
+const disabledFutureDates = (time: Date) => {
+  return time.getTime() > Date.now();
 };
 
 const goBack = () => {
@@ -212,96 +303,140 @@ const goBack = () => {
 };
 
 const showAddAnalysisDialog = () => {
-  analysisForm.value = {
-    date: new Date().toISOString().split('T')[0],
-    xrayImage: '',
-    file: null
-  };
+  analysisForm.value.date = new Date().toISOString().split('T')[0];
+  analysisForm.value.xrayImageFile = null;
   addAnalysisDialogVisible.value = true;
+  // Сброс валидации формы при открытии
+  nextTick(() => {
+    analysisFormRef.value?.clearValidate();
+    uploadRef.value?.clearFiles();
+  });
 };
 
-const handleFileChange = (file: UploadFile) => {
-  const isImage = file.raw?.type.startsWith('image/');
+const resetAnalysisFormDialog = () => {
+    if (analysisFormRef.value) {
+        analysisFormRef.value.resetFields(); // Сброс значений полей формы
+    }
+    analysisForm.value.xrayImageFile = null; // Явный сброс файла
+    if (uploadRef.value) {
+        uploadRef.value.clearFiles(); // Очистка списка файлов в el-upload
+    }
+};
+
+const handleFileChange = (uploadFile: UploadFile, uploadFiles: UploadFile[]) => {
+  const file = uploadFile.raw;
+  if (!file) {
+    analysisForm.value.xrayImageFile = null;
+    return;
+  }
+
+  const isImage = file.type.startsWith('image/jpeg') || file.type.startsWith('image/png');
   const isLt10M = file.size / 1024 / 1024 < 10;
 
   if (!isImage) {
-    ElMessage.error('Можно загружать только изображения!');
+    ElMessage.error('Можно загружать только изображения JPG/PNG!');
+    uploadFiles.splice(0, uploadFiles.length); // Очищаем список файлов
+    analysisForm.value.xrayImageFile = null;
     return false;
   }
-
   if (!isLt10M) {
     ElMessage.error('Размер изображения не должен превышать 10MB!');
+    uploadFiles.splice(0, uploadFiles.length);
+    analysisForm.value.xrayImageFile = null;
     return false;
   }
-
-  analysisForm.value.xrayImage = URL.createObjectURL(file.raw!);
-  analysisForm.value.file = file.raw;
+  analysisForm.value.xrayImageFile = file;
+  // Триггер валидации для поля файла
+  analysisFormRef.value?.validateField('xrayImageFile').catch(() => {});
   return true;
 };
 
+const handleFileRemove = () => {
+    analysisForm.value.xrayImageFile = null;
+    analysisFormRef.value?.validateField('xrayImageFile').catch(() => {});
+};
+
 const submitAnalysisForm = async (formEl: FormInstance | undefined) => {
-  if (!formEl) return;
+  if (!formEl || !patient.value) return;
+  isSubmittingAnalysis.value = true;
 
-  await formEl.validate((valid) => {
-    if (valid && patient.value) {
-      const predictedAge = Math.random() * 5 + 10;
+  await formEl.validate(async (valid) => {
+    if (valid && analysisForm.value.xrayImageFile) {
+      const formData = new FormData();
+      formData.append('date', analysisForm.value.date);
+      formData.append('xrayImage', analysisForm.value.xrayImageFile as Blob);
 
-      patientsStore.addAnalysis(patientId.value, {
-        date: analysisForm.value.date,
-        predictedAge,
-        xrayImage: analysisForm.value.xrayImage,
-        doctorNotes: ''
-      });
+      try {
+        const response = await apiClient.post<AnalysisBackend>(
+          `/patients/${patient.value!.id}/analyses`,
+          formData // Axios сам установит Content-Type: multipart/form-data
+        );
+        const newAnalysis = response.data;
+        patient.value!.analyses.push(newAnalysis); // Добавляем новый анализ в список
 
-      ElMessage({
-        message: 'Анализ успешно добавлен',
-        type: 'success'
-      });
-
-      addAnalysisDialogVisible.value = false;
+        ElMessage.success('Анализ успешно добавлен и отправлен на обработку.');
+        addAnalysisDialogVisible.value = false;
+      } catch (error: any) {
+        ElMessage.error(`Ошибка при добавлении анализа: ${error.message || 'Ошибка сервера'}`);
+      } finally {
+        isSubmittingAnalysis.value = false;
+      }
+    } else {
+      if (!analysisForm.value.xrayImageFile) {
+         ElMessage.warning('Пожалуйста, загрузите изображение рентгена.');
+      } else {
+         ElMessage.warning('Пожалуйста, заполните все обязательные поля.');
+      }
+      isSubmittingAnalysis.value = false;
     }
   });
 };
 
-const showAnalysisDetail = (analysis: Analysis) => {
-  selectedAnalysis.value = analysis;
+const showAnalysisDetail = (analysis: AnalysisBackend) => {
+  selectedAnalysis.value = { ...analysis }; // Создаем копию, чтобы избежать прямой мутации
   notesForm.value.doctorNotes = analysis.doctorNotes || '';
   analysisDetailDialogVisible.value = true;
 };
 
-const saveNotes = () => {
-  if (selectedAnalysis.value && patient.value) {
-    patientsStore.updateAnalysisNotes(
-        patientId.value,
-        selectedAnalysis.value.id,
-        notesForm.value.doctorNotes
+const saveNotes = async () => {
+  if (!selectedAnalysis.value || !patient.value) return;
+  isSavingNotes.value = true;
+  try {
+    const payload = { doctorNotes: notesForm.value.doctorNotes };
+    const response = await apiClient.put<AnalysisBackend>(
+      `/patients/${patient.value.id}/analyses/${selectedAnalysis.value.id}`,
+      payload
     );
+    const updatedAnalysisFromServer = response.data;
 
-    ElMessage({
-      message: 'Примечания сохранены',
-      type: 'success'
-    });
-
-    const updatedAnalysis = patientsStore.getAnalysisByIds(
-        patientId.value,
-        selectedAnalysis.value.id
-    );
-    if (updatedAnalysis) {
-      selectedAnalysis.value = updatedAnalysis;
+    const analysisIndex = patient.value.analyses.findIndex(a => a.id === updatedAnalysisFromServer.id);
+    if (analysisIndex !== -1) {
+      patient.value.analyses[analysisIndex] = updatedAnalysisFromServer;
     }
+    if(selectedAnalysis.value && selectedAnalysis.value.id === updatedAnalysisFromServer.id){
+        selectedAnalysis.value.doctorNotes = updatedAnalysisFromServer.doctorNotes;
+        selectedAnalysis.value.predictedAge = updatedAnalysisFromServer.predictedAge; // Обновляем и возраст, если он мог измениться
+    }
+
+    ElMessage.success('Примечания сохранены.');
+  } catch (error: any) {
+    ElMessage.error(`Ошибка при сохранении примечаний: ${error.message || 'Ошибка сервера'}`);
+  } finally {
+    isSavingNotes.value = false;
   }
 };
 
-onMounted(() => {
-  setTimeout(() => {
-    loading.value = false;
-    if (!patient.value) {
-      ElMessage({
-        message: 'Пациент не найден',
-        type: 'error'
-      });
+const onImageError = (event: Event) => {
+    const imgElement = event.target as HTMLImageElement;
+    ElMessage.warning('Не удалось загрузить изображение рентгена.');
+    if (selectedAnalysis.value) {
+        // Можно установить флаг, что изображение не загрузилось, или заменить URL на placeholder
+        // selectedAnalysis.value.xrayImageURL = '/path/to/placeholder.png';
     }
-  }, 500);
+};
+
+onMounted(() => {
+  fetchPatientDetails();
 });
 </script>
 

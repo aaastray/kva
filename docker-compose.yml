@@ -1,0 +1,30 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - my_network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - my_network
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command: uvicorn app:app --host 0.0.0.0 --port 8000
+
+volumes:
+  postgres_data:
+networks:
+  my_network:
