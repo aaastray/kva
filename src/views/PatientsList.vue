@@ -16,6 +16,8 @@
             :prefix-icon="Search"
             clearable
             class="search-input"
+            @input="debouncedFetchPatients"
+            @clear="fetchPatients"
         />
       </div>
     </el-card>
@@ -23,13 +25,18 @@
     <div class="table-container">
       <el-table
           v-loading="loading"
-          :data="filteredPatients"
+          :data="patients"
           style="width: 100%; margin-top: 20px"
           @row-click="handleRowClick"
+          empty-text="Нет данных о пациентах"
       >
         <el-table-column prop="lastName" label="Фамилия" min-width="120" />
         <el-table-column prop="firstName" label="Имя" min-width="120" />
-        <el-table-column prop="middleName" label="Отчество" min-width="120" />
+        <el-table-column prop="middleName" label="Отчество" min-width="120">
+            <template #default="{ row }">
+                {{ row.middleName || '-' }}
+            </template>
+        </el-table-column>
         <el-table-column prop="birthDate" label="Дата рождения" min-width="150">
           <template #default="{ row }">
             {{ formatDate(row.birthDate) }}
@@ -56,40 +63,95 @@
     </div>
 
     <el-empty
-        v-if="filteredPatients.length === 0"
-        description="Нет данных о пациентах"
+        v-if="!loading && patients.length === 0 && !filter.searchQuery"
+        description="Нет данных о пациентах. Добавьте первого."
+    />
+     <el-empty
+        v-if="!loading && patients.length === 0 && filter.searchQuery"
+        description="Пациенты по вашему запросу не найдены."
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { usePatientsStore } from '@/stores/patients';
-import { type PatientFilter } from '@/types';
+import { ElMessage } from 'element-plus';
 import { Search, Plus } from '@element-plus/icons-vue';
+import apiClient from '@/services/api'; // Убедитесь, что путь правильный
+
+// Типы данных, которые приходят с бэкенда
+interface AnalysisBackend {
+  id: number;
+  date: string;
+  predictedAge: number;
+  xrayImageURL: string;
+  doctorNotes?: string;
+}
+
+interface PatientBackend {
+  id: number;
+  lastName: string;
+  firstName: string;
+  middleName?: string;
+  birthDate: string; // YYYY-MM-DD
+  gender: 'male' | 'female';
+  policyNumber: string;
+  analyses: AnalysisBackend[];
+}
 
 const router = useRouter();
-const patientsStore = usePatientsStore();
-const loading = ref(false);
+const loading = ref(true);
+const patients = ref<PatientBackend[]>([]);
 
-const filter = ref<PatientFilter>({
+const filter = ref({
   searchQuery: ''
 });
 
-const filteredPatients = computed(() => {
-  const query = filter.value.searchQuery.toLowerCase().trim();
-  if (!query) return patientsStore.patients;
+let debounceTimer: number | undefined;
 
-  return patientsStore.patients.filter(patient => {
-    const fullName = `${patient.lastName} ${patient.firstName} ${patient.middleName}`.toLowerCase();
-    return fullName.includes(query) || patient.policyNumber.toLowerCase().includes(query);
-  });
-});
+const fetchPatients = async () => {
+  loading.value = true;
+  try {
+    const params: { searchQuery?: string } = {};
+    if (filter.value.searchQuery.trim()) {
+      params.searchQuery = filter.value.searchQuery.trim();
+    }
+    // Указываем тип ответа для apiClient.get
+    const response = await apiClient.get<PatientBackend[]>('/patients', { params });
+    patients.value = response.data;
+  } catch (error: any) {
+    ElMessage.error(`Не удалось загрузить список пациентов: ${error.message || 'Ошибка сервера'}`);
+    patients.value = [];
+  } finally {
+    loading.value = false;
+  }
+};
+
+const debouncedFetchPatients = () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = window.setTimeout(() => {
+    fetchPatients();
+  }, 300);
+};
 
 const formatDate = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('ru-RU');
+  if (!dateString) return '-';
+  try {
+    const [year, month, day] = dateString.split('-');
+    if (year && month && day) {
+        return `${day}.${month}.${year}`;
+    }
+    // Если формат другой, пытаемся распарсить как дату
+    const date = new Date(dateString);
+    if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('ru-RU');
+    }
+    return dateString; // Возвращаем как есть, если не удалось отформатировать
+  } catch (e) {
+      console.warn("Could not format date:", dateString, e);
+      return dateString;
+  }
 };
 
 const goToPatientDetail = (id: number) => {
@@ -100,19 +162,14 @@ const goToAddPatient = () => {
   router.push({ name: 'addPatient' });
 };
 
-const handleRowClick = (row: any) => {
+const handleRowClick = (row: PatientBackend) => {
   goToPatientDetail(row.id);
 };
 
 onMounted(() => {
-  if (patientsStore.patients.length === 0) {
-    loading.value = true;
-    setTimeout(() => {
-      patientsStore.initDemoData();
-      loading.value = false;
-    }, 500);
-  }
+  fetchPatients();
 });
+
 </script>
 
 <style scoped>
