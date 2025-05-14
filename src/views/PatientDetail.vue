@@ -140,7 +140,7 @@
           </el-descriptions-item>
         </el-descriptions>
 
-            <p><strong>Рентгеновский снимок:</strong></p>
+            <p style="margin: 0.5rem 0"><strong>Рентгеновский снимок:</strong></p>
             <img
                 :src="getFullImageUrl(selectedAnalysis.xrayImageURL)"
                 alt="Рентген"
@@ -155,6 +155,7 @@
                 <el-input
                     v-model="notesForm.doctorNotes"
                     type="textarea"
+                    resize="none"
                     rows="6"
                     placeholder="Введите примечания..."
                 />
