@@ -37,7 +37,7 @@
           </el-table-column>
           <el-table-column prop="predictedAge" label="Предсказанный возраст" min-width="150">
             <template #default="{ row }">
-              {{ row.predictedAge !== null && row.predictedAge !== undefined ? row.predictedAge.toFixed(1) + ' месяцев' : 'Обработка...' }}
+              {{ row.predictedAge !== null && row.predictedAge !== undefined ? row.predictedAge.toFixed(1) + ' лет' : 'Обработка...' }}
             </template>
           </el-table-column>
           <el-table-column label="Действия" width="150" fixed="right">
@@ -136,7 +136,7 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="Дата рентгена">{{ formatDate(selectedAnalysis.date) }}</el-descriptions-item>
           <el-descriptions-item label="Предсказанный возраст">
-            {{ selectedAnalysis.predictedAge !== null && selectedAnalysis.predictedAge !== undefined ? selectedAnalysis.predictedAge.toFixed(1) + ' месяцев' : 'Обработка...' }}
+            {{ selectedAnalysis.predictedAge !== null && selectedAnalysis.predictedAge !== undefined ? selectedAnalysis.predictedAge.toFixed(1) + ' лет' : 'Обработка...' }}
           </el-descriptions-item>
         </el-descriptions>
 
