@@ -37,7 +37,7 @@
           </el-table-column>
           <el-table-column prop="predictedAge" label="Предсказанный возраст" min-width="150">
             <template #default="{ row }">
-              {{ row.predictedAge !== null && row.predictedAge !== undefined ? row.predictedAge.toFixed(1) + ' лет' : 'Обработка...' }}
+              {{ row.predictedAge !== null && row.predictedAge !== undefined ? row.predictedAge.toFixed(1) + ' месяцев' : 'Обработка...' }}
             </template>
           </el-table-column>
           <el-table-column label="Действия" width="150" fixed="right">
@@ -88,6 +88,7 @@
           />
         </el-form-item>
 
+
         <el-form-item label="Загрузите изображение рентгена" prop="xrayImageFile">
           <el-upload
               ref="uploadRef"
@@ -95,6 +96,7 @@
               drag
               action="#"
               :auto-upload="false"
+              :on-exceed="handleExceed"
               :on-change="handleFileChange"
               :on-remove="handleFileRemove"
               :limit="1"
@@ -132,14 +134,12 @@
     >
       <div v-if="selectedAnalysis" class="analysis-detail-content">
         <el-descriptions :column="1" border>
-            <el-descriptions-item label="Дата рентгена">{{ formatDate(selectedAnalysis.date) }}</el-descriptions-item>
-            <el-descriptions-item label="Предсказанный возраст">
-                {{ selectedAnalysis.predictedAge !== null && selectedAnalysis.predictedAge !== undefined ? selectedAnalysis.predictedAge.toFixed(1) + ' лет' : 'Обработка...' }}
-            </el-descriptions-item>
+          <el-descriptions-item label="Дата рентгена">{{ formatDate(selectedAnalysis.date) }}</el-descriptions-item>
+          <el-descriptions-item label="Предсказанный возраст">
+            {{ selectedAnalysis.predictedAge !== null && selectedAnalysis.predictedAge !== undefined ? selectedAnalysis.predictedAge.toFixed(1) + ' месяцев' : 'Обработка...' }}
+          </el-descriptions-item>
         </el-descriptions>
 
-        <el-row :gutter="20" style="margin-top: 20px;">
-          <el-col :xs="24" :md="12" class="xray-image-container">
             <p><strong>Рентгеновский снимок:</strong></p>
             <img
                 :src="getFullImageUrl(selectedAnalysis.xrayImageURL)"
@@ -149,8 +149,6 @@
                 @error="onImageError"
             />
             <el-empty description="Изображение отсутствует или не загрузилось" v-else />
-          </el-col>
-          <el-col :xs="24" :md="12">
             <p><strong>Примечания доктора:</strong></p>
             <el-form :model="notesForm" @submit.prevent="saveNotes">
               <el-form-item>
@@ -165,10 +163,8 @@
                 <el-button type="primary" @click="saveNotes" :loading="isSavingNotes">Сохранить примечания</el-button>
               </el-form-item>
             </el-form>
-          </el-col>
-        </el-row>
       </div>
-       <el-empty v-else description="Данные анализа не загружены."/>
+      <el-empty v-else description="Данные анализа не загружены."/>
     </el-dialog>
 
   </div>
@@ -191,6 +187,7 @@ interface AnalysisBackend {
   doctorNotes?: string;
 }
 
+
 interface PatientBackend {
   id: number;
   lastName: string;
@@ -208,17 +205,17 @@ const router = useRouter();
 const loadingPatient = ref(true);
 const patient = ref<PatientBackend | null>(null);
 const patientId = computed(() => {
-    const idParam = route.params.id;
-    return Array.isArray(idParam) ? Number(idParam[0]) : Number(idParam);
+  const idParam = route.params.id;
+  return Array.isArray(idParam) ? Number(idParam[0]) : Number(idParam);
 });
 
 
 const fetchPatientDetails = async () => {
   if (isNaN(patientId.value)) {
-      ElMessage.error('Некорректный ID пациента.');
-      loadingPatient.value = false;
-      router.push({ name: 'home' });
-      return;
+    ElMessage.error('Некорректный ID пациента.');
+    loadingPatient.value = false;
+    router.push({ name: 'home' });
+    return;
   }
   loadingPatient.value = true;
   try {
@@ -261,11 +258,11 @@ const analysisRules: FormRules = {
     message: 'Пожалуйста, загрузите изображение рентгена',
     // Валидатор сработает при изменении xrayImageFile
     validator: (rule, value, callback) => {
-        if (!analysisForm.value.xrayImageFile) {
-            callback(new Error('Пожалуйста, загрузите изображение рентгена'));
-        } else {
-            callback();
-        }
+      if (!analysisForm.value.xrayImageFile) {
+        callback(new Error('Пожалуйста, загрузите изображение рентгена'));
+      } else {
+        callback();
+      }
     },
     trigger: 'change'
   }]
@@ -279,18 +276,18 @@ const isSavingNotes = ref(false);
 
 const formatDate = (dateString: string): string => {
   if (!dateString) return '-';
-   try {
+  try {
     const [year, month, day] = dateString.split('-');
     if (year && month && day) {
-        return `${day}.${month}.${year}`;
+      return `${day}.${month}.${year}`;
     }
     const date = new Date(dateString);
     if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('ru-RU');
+      return date.toLocaleDateString('ru-RU');
     }
     return dateString;
   } catch (e) {
-      return dateString;
+    return dateString;
   }
 };
 
@@ -314,14 +311,23 @@ const showAddAnalysisDialog = () => {
 };
 
 const resetAnalysisFormDialog = () => {
-    if (analysisFormRef.value) {
-        analysisFormRef.value.resetFields(); // Сброс значений полей формы
-    }
-    analysisForm.value.xrayImageFile = null; // Явный сброс файла
-    if (uploadRef.value) {
-        uploadRef.value.clearFiles(); // Очистка списка файлов в el-upload
-    }
+  if (analysisFormRef.value) {
+    analysisFormRef.value.resetFields(); // Сброс значений полей формы
+  }
+  analysisForm.value.xrayImageFile = null; // Явный сброс файла
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles(); // Очистка списка файлов в el-upload
+  }
 };
+
+function handleExceed(files: File[]){
+  uploadRef.value!.clearFiles()
+  const file = files[0] as UploadRawFile
+  uploadRef.value!.clearFiles()
+  uploadRef.value!.handleStart(file)
+  uploadRef.value!.submit()
+}
+
 
 const handleFileChange = (uploadFile: UploadFile, uploadFiles: UploadFile[]) => {
   const file = uploadFile.raw;
@@ -348,12 +354,16 @@ const handleFileChange = (uploadFile: UploadFile, uploadFiles: UploadFile[]) => 
   analysisForm.value.xrayImageFile = file;
   // Триггер валидации для поля файла
   analysisFormRef.value?.validateField('xrayImageFile').catch(() => {});
+
+  uploadRef.value!.clearFiles();
+  uploadRef.value!.handleStart(file);
+
   return true;
 };
 
 const handleFileRemove = () => {
-    analysisForm.value.xrayImageFile = null;
-    analysisFormRef.value?.validateField('xrayImageFile').catch(() => {});
+  analysisForm.value.xrayImageFile = null;
+  analysisFormRef.value?.validateField('xrayImageFile').catch(() => {});
 };
 
 const submitAnalysisForm = async (formEl: FormInstance | undefined) => {
@@ -368,8 +378,8 @@ const submitAnalysisForm = async (formEl: FormInstance | undefined) => {
 
       try {
         const response = await apiClient.post<AnalysisBackend>(
-          `/patients/${patient.value!.id}/analyses`,
-          formData // Axios сам установит Content-Type: multipart/form-data
+            `/patients/${patient.value!.id}/analyses`,
+            formData // Axios сам установит Content-Type: multipart/form-data
         );
         const newAnalysis = response.data;
         patient.value!.analyses.push(newAnalysis); // Добавляем новый анализ в список
@@ -383,9 +393,9 @@ const submitAnalysisForm = async (formEl: FormInstance | undefined) => {
       }
     } else {
       if (!analysisForm.value.xrayImageFile) {
-         ElMessage.warning('Пожалуйста, загрузите изображение рентгена.');
+        ElMessage.warning('Пожалуйста, загрузите изображение рентгена.');
       } else {
-         ElMessage.warning('Пожалуйста, заполните все обязательные поля.');
+        ElMessage.warning('Пожалуйста, заполните все обязательные поля.');
       }
       isSubmittingAnalysis.value = false;
     }
@@ -404,8 +414,8 @@ const saveNotes = async () => {
   try {
     const payload = { doctorNotes: notesForm.value.doctorNotes };
     const response = await apiClient.put<AnalysisBackend>(
-      `/patients/${patient.value.id}/analyses/${selectedAnalysis.value.id}`,
-      payload
+        `/patients/${patient.value.id}/analyses/${selectedAnalysis.value.id}`,
+        payload
     );
     const updatedAnalysisFromServer = response.data;
 
@@ -414,8 +424,8 @@ const saveNotes = async () => {
       patient.value.analyses[analysisIndex] = updatedAnalysisFromServer;
     }
     if(selectedAnalysis.value && selectedAnalysis.value.id === updatedAnalysisFromServer.id){
-        selectedAnalysis.value.doctorNotes = updatedAnalysisFromServer.doctorNotes;
-        selectedAnalysis.value.predictedAge = updatedAnalysisFromServer.predictedAge; // Обновляем и возраст, если он мог измениться
+      selectedAnalysis.value.doctorNotes = updatedAnalysisFromServer.doctorNotes;
+      selectedAnalysis.value.predictedAge = updatedAnalysisFromServer.predictedAge; // Обновляем и возраст, если он мог измениться
     }
 
     ElMessage.success('Примечания сохранены.');
@@ -426,13 +436,14 @@ const saveNotes = async () => {
   }
 };
 
+
 const onImageError = (event: Event) => {
-    const imgElement = event.target as HTMLImageElement;
-    ElMessage.warning('Не удалось загрузить изображение рентгена.');
-    if (selectedAnalysis.value) {
-        // Можно установить флаг, что изображение не загрузилось, или заменить URL на placeholder
-        // selectedAnalysis.value.xrayImageURL = '/path/to/placeholder.png';
-    }
+  const imgElement = event.target as HTMLImageElement;
+  ElMessage.warning('Не удалось загрузить изображение рентгена.');
+  if (selectedAnalysis.value) {
+    // Можно установить флаг, что изображение не загрузилось, или заменить URL на placeholder
+    // selectedAnalysis.value.xrayImageURL = '/path/to/placeholder.png';
+  }
 };
 
 onMounted(() => {
@@ -467,11 +478,20 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.upload-demo {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 .analysis-detail {
   padding: 10px;
 }
 
 .xray-image {
   text-align: center;
+}
+.xray-image-preview {
+  width: 100%;
 }
 </style>

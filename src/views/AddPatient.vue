@@ -17,26 +17,15 @@
           status-icon
           @submit.prevent="submitForm(formRef)"
       >
-        <el-row :gutter="20">
-          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="Фамилия" prop="lastName">
               <el-input v-model="patientForm.lastName" />
             </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="Имя" prop="firstName">
               <el-input v-model="patientForm.firstName" />
             </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="Отчество" prop="middleName">
               <el-input v-model="patientForm.middleName" placeholder="Необязательно" />
             </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-row :gutter="20">
-          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="Дата рождения" prop="birthDate">
               <el-date-picker
                   v-model="patientForm.birthDate"
@@ -48,21 +37,15 @@
                   :disabled-date="disabledFutureDates"
               />
             </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="Пол" prop="gender">
               <el-radio-group v-model="patientForm.gender">
                 <el-radio label="male">Мужской</el-radio>
                 <el-radio label="female">Женский</el-radio>
               </el-radio-group>
             </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
             <el-form-item label="Номер полиса" prop="policyNumber">
               <el-input v-model="patientForm.policyNumber" />
             </el-form-item>
-          </el-col>
-        </el-row>
 
         <el-form-item>
           <el-button type="primary" @click="submitForm(formRef)" :loading="isSubmitting">
@@ -195,7 +178,10 @@ const goBack = () => {
 
 <style scoped>
 .add-patient {
-  padding: 20px 0;
+  padding: 10px 0;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .page-header {

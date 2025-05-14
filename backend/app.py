@@ -458,19 +458,29 @@ async def add_analysis_to_patient_endpoint(
         # 1. Подготовка изображения для сегментации
     # seg_processor_global.transforms[0] это Resize. Получим его размер.
     # Убедимся, что seg_processor_global и его transforms[0] существуют
-    seg_target_size_h, seg_target_size_w = IMG_SIZE_KERAS, IMG_SIZE_KERAS  # Default
+    seg_target_size_h, seg_target_size_w = 1024, 1024  # Default
     if seg_processor_global and hasattr(seg_processor_global, 'transforms') and \
             len(seg_processor_global.transforms) > 0 and hasattr(seg_processor_global.transforms[0], 'size'):
-        # size может быть int (для Resize(N)) или tuple (H,W) для Resize((H,W))
         s = seg_processor_global.transforms[0].size
-        if isinstance(s, int):
+        if isinstance(s, int):  # e.g., Resize(512)
             seg_target_size_h, seg_target_size_w = s, s
-        elif isinstance(s, (list, tuple)) and len(s) == 2:
+        elif isinstance(s, (list, tuple)) and len(s) == 2:  # e.g., Resize((512, 512))
+            # torchvision.transforms.Resize.size is (H, W)
             seg_target_size_h, seg_target_size_w = s[0], s[1]
+        else:
+            print(
+                f"Warning: Unexpected size format from seg_processor's Resize transform: {s}. Using default {1024}x{1024}.")
+            # Уже установлены значения по умолчанию, ничего не делаем
+    else:
+        print(
+            f"Warning: seg_processor_global or its Resize transform not configured. Using default {1024}x{1024} for segmentation resize.")
+        # Уже установлены значения по умолчанию
 
-    # Resize для Segformer ожидает (width, height) для PIL, а хранит (height, width)
+    # PIL Image.resize ожидает (width, height)
+    print(
+        f"Resizing original image for segmentation to (W, H): ({seg_target_size_w}, {seg_target_size_h})")  # Debug print
     image_resized_for_seg = original_pil_img.convert("RGB").resize(
-        (seg_target_size_w, seg_target_size_h),  # (width, height)
+        (seg_target_size_w, seg_target_size_h),
         Image.Resampling.LANCZOS
     )
 

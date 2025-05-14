@@ -53,12 +53,6 @@ import { RouterView } from 'vue-router'
   margin: 0 auto;
 }
 
-.el-main {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
 .el-footer {
   background-color: #f5f7fa;
   color: #606266;
